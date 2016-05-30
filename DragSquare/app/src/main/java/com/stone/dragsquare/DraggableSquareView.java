@@ -7,6 +7,7 @@ import android.os.Message;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v4.widget.ViewDragHelper;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
@@ -84,6 +85,7 @@ public class DraggableSquareView extends ViewGroup {
             DraggableItemView itemView = new DraggableItemView(getContext());
             itemView.setStatus(allStatus[i]);
             itemView.setParentView(this);
+            itemView.setTag("tag"+i);
             originViewPositionList.add(new Point()); //  原始位置点，由此初始化，一定与子View的status绑定
             addView(itemView);
         }
@@ -148,6 +150,8 @@ public class DraggableSquareView extends ViewGroup {
             // 所以此处加了一层判断，剔除不关心的回调，以优化性能
             if (changedView == draggingView) {
                 DraggableItemView changedItemView = (DraggableItemView) changedView;
+                Log.e("onViewPositionChanged:","changedView tag = "+changedItemView.getTag().toString());
+                //其实拖动的时候被拖动的View的实例始终没变.只是其中的status的值设置了不同而已
                 switchPositionIfNeeded(changedItemView);
             }
         }
@@ -156,12 +160,14 @@ public class DraggableSquareView extends ViewGroup {
         public boolean tryCaptureView(View child, int pointerId) {
             // 按下的时候，缩放到最小的级别
             draggingView = (DraggableItemView) child;
+            Log.e("tryCaptureView:","draggingView = "+ draggingView.getStatus());
             return draggingView.isDraggable();
         }
 
         @Override
         public void onViewReleased(View releasedChild, float xvel, float yvel) {
             DraggableItemView itemView = (DraggableItemView) releasedChild;
+            Log.e("onViewReleased:","itemView = "+ itemView.getStatus());
             itemView.onDragRelease();
         }
 
@@ -184,11 +190,12 @@ public class DraggableSquareView extends ViewGroup {
      * 根据draggingView的位置，看看是否需要与其它itemView互换位置
      */
     private void switchPositionIfNeeded(DraggableItemView draggingView) {
+        //拖动view的中心坐标会随时变化
         int centerX = draggingView.getLeft() + sideLength / 2;
         int centerY = draggingView.getTop() + sideLength / 2;
         int everyWidth = getMeasuredWidth() / 3;
 
-        int fromStatus = -1, toStatus = draggingView.getStatus();
+        int fromStatus = -1, toStatus = draggingView.getStatus();//被拖动的view的status
 
         switch (draggingView.getStatus()) {
             case DraggableItemView.STATUS_LEFT_TOP:
@@ -215,15 +222,18 @@ public class DraggableSquareView extends ViewGroup {
                     }
                 }
 
+                //获取被拖动的View的目的地view
                 DraggableItemView toItemView = getItemViewByStatus(fromChangeIndex);
                 if (!toItemView.isDraggable()) {
                     return;
                 }
 
                 synchronized (this) {
+                    //将挨着的view交替位置
                     for (int i = 1; i <= fromChangeIndex; i++) {
                         switchPosition(i, i - 1);
                     }
+                    //通过view最终停留的位置 设置status
                     draggingView.setStatus(fromChangeIndex);
                 }
                 return;
@@ -286,7 +296,7 @@ public class DraggableSquareView extends ViewGroup {
     }
 
     /**
-     * 调换位置
+     * 调换位置 从位置的后面到前面 3->2->1
      */
     private boolean switchPosition(int fromStatus, int toStatus) {
         DraggableItemView itemView = getItemViewByStatus(fromStatus);
@@ -322,14 +332,17 @@ public class DraggableSquareView extends ViewGroup {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        //每个方块的长宽
         int everyLength = (getMeasuredWidth() - 4 * spaceInterval) / 3;
         int itemLeft = 0;
         int itemTop = 0;
         int itemRight = 0;
         int itemBottom = 0;
-        // 每个view的边长是everyLength * 2 + spaceInterval
+        // 每个view的实际长宽是everyLength * 2 + spaceInterval,
+        //除了LEFT_TOP外 其余的都是对其做了缩放操作
         sideLength = everyLength * 2 + spaceInterval;
         int halfSideLength = sideLength / 2; // 边长的一半
+        //右下角view的center
         int rightCenter = r - spaceInterval - everyLength / 2;
         int bottomCenter = b - spaceInterval - everyLength / 2;
 
@@ -339,6 +352,7 @@ public class DraggableSquareView extends ViewGroup {
             DraggableItemView itemView = (DraggableItemView) getChildAt(i);
             itemView.setScaleRate(scaleRate);
             switch (itemView.getStatus()) {
+                //根据不同的位置 计算每个item的坐标
                 case DraggableItemView.STATUS_LEFT_TOP:
                     int centerPos = spaceInterval + everyLength + spaceInterval / 2;
                     itemLeft = centerPos - halfSideLength;
@@ -391,39 +405,18 @@ public class DraggableSquareView extends ViewGroup {
             itemPoint.x = itemLeft;
             itemPoint.y = itemTop;
 
+            //重新布局DraggableItemView
             itemView.layout(itemLeft, itemTop, itemRight, itemBottom);
         }
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        //宽高设置为相同
         measureChildren(widthMeasureSpec, widthMeasureSpec);
         int maxWidth = MeasureSpec.getSize(widthMeasureSpec);
         int width = resolveSizeAndState(maxWidth, widthMeasureSpec, 0);
         setMeasuredDimension(width, width);
-    }
-
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
-            // 手指按下的时候，需要把某些view bringToFront，否则的话，tryCapture将不按预期工作
-            getParent().requestDisallowInterceptTouchEvent(true);
-            downX = (int) ev.getX();
-            downY = (int) ev.getY();
-            downTime = System.currentTimeMillis();
-            bringToFrontWhenTouchDown(downX, downY);
-        } else if (ev.getAction() == MotionEvent.ACTION_UP) {
-            if (draggingView != null) {
-                draggingView.onDragRelease();
-            }
-            draggingView = null;
-
-            if (null != moveAnchorThread) {
-                moveAnchorThread.interrupt();
-                moveAnchorThread = null;
-            }
-        }
-        return super.dispatchTouchEvent(ev);
     }
 
     /**
@@ -433,12 +426,14 @@ public class DraggableSquareView extends ViewGroup {
         int statusIndex = getStatusByDownPoint(downX, downY);
         final DraggableItemView itemView = getItemViewByStatus(statusIndex);
         if (indexOfChild(itemView) != getChildCount() - 1) {
+            //将按下的view 移动到最前面
             bringChildToFront(itemView);
         }
         if (!itemView.isDraggable()) {
             return;
         }
 
+        //设置点按下 item的左上角的位置
         itemView.saveAnchorInfo(downX, downY);
         moveAnchorThread = new Thread() {
             @Override
@@ -456,6 +451,9 @@ public class DraggableSquareView extends ViewGroup {
         moveAnchorThread.start();
     }
 
+    /**
+     * 通过触摸的点判断到底是哪个iten
+     */
     private int getStatusByDownPoint(int downX, int downY) {
         int everyWidth = getMeasuredWidth() / 3;
         if (downX < everyWidth) {
@@ -481,6 +479,30 @@ public class DraggableSquareView extends ViewGroup {
         }
     }
 
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            // 手指按下的时候，需要把某些view bringToFront，否则的话，tryCapture将不按预期工作
+            getParent().requestDisallowInterceptTouchEvent(true);
+            downX = (int) ev.getX();
+            downY = (int) ev.getY();
+            downTime = System.currentTimeMillis();
+            bringToFrontWhenTouchDown(downX, downY);
+        } else if (ev.getAction() == MotionEvent.ACTION_UP) {
+            if (draggingView != null) {
+                draggingView.onDragRelease();
+            }
+            draggingView = null;
+
+            if (null != moveAnchorThread) {
+                moveAnchorThread.interrupt();
+                moveAnchorThread = null;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         if (downTime > 0 && System.currentTimeMillis() - downTime > INTERCEPT_TIME_SLOP) {
@@ -492,6 +514,7 @@ public class DraggableSquareView extends ViewGroup {
             mDragHelper.processTouchEvent(ev);
         }
 
+        //处理单击的情况 非拖动
         boolean moveFlag = moveDetector.onTouchEvent(ev);
         if (moveFlag) {
             if (null != moveAnchorThread) {

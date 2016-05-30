@@ -9,7 +9,6 @@ import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.Toast;
 
 import com.facebook.rebound.SimpleSpringListener;
 import com.facebook.rebound.Spring;
@@ -60,6 +59,7 @@ public class DraggableItemView extends FrameLayout {
 
     public DraggableItemView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        //view 可以通过inflate来设置view的内容
         inflate(context, R.layout.drag_item, this);
         imageView = (ImageView) findViewById(R.id.drag_item_imageview);
         maskView = findViewById(R.id.drag_item_mask_view);
@@ -84,6 +84,7 @@ public class DraggableItemView extends FrameLayout {
         getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
+                //onGlobalLayout 返回会回调两次 所以要用 @param hasSetCurrentSpringValue 来保证只执行一次
                 if (!hasSetCurrentSpringValue) {
                     adjustImageView();
                     hasSetCurrentSpringValue = true;
@@ -155,6 +156,10 @@ public class DraggableItemView extends FrameLayout {
         setCurrentSpringPos(getLeft(), getTop());
     }
 
+    /**
+     * 设置每个view的缩放比例
+     * @param scaleRate
+     */
     public void setScaleRate(float scaleRate) {
         this.scaleRate = scaleRate;
         this.smallerRate = scaleRate * 0.9f;
@@ -175,11 +180,13 @@ public class DraggableItemView extends FrameLayout {
         }
 
         this.status = toStatus;
+        //将toStatus 移动到 fromStatus的 point
         Point point = parentView.getOriginViewPos(status);
         animTo(point.x, point.y);
     }
 
     public void animTo(int xPos, int yPos) {
+        //Set the spring in motion; moving from 0 to xPos
         springX.setEndValue(xPos);
         springY.setEndValue(yPos);
     }
@@ -208,6 +215,7 @@ public class DraggableItemView extends FrameLayout {
 
     public void saveAnchorInfo(int downX, int downY) {
         int halfSide = getMeasuredWidth() / 2;
+        //这个地方容易误解  anchor 其实是在左上角 而不是center
         anchorX = downX - halfSide;
         anchorY = downY - halfSide;
     }
