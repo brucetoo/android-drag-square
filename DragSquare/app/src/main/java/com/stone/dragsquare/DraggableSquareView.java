@@ -148,9 +148,15 @@ public class DraggableSquareView extends ViewGroup {
         public void onViewPositionChanged(View changedView, int left, int top, int dx, int dy) {
             // draggingView拖动的时候，如果与其它子view交换位置，其他子view位置改变，也会进入这个回调
             // 所以此处加了一层判断，剔除不关心的回调，以优化性能
-            if (changedView == draggingView) {
+            /**
+             上诉两句话是错误的描述,changedView 始终是tryCapture锁定的View,可以通过如下Log来证明结论
+             draggingView之所以拖动的是能使其他的子view位置变化,是因为在draggingView切换了位置的时候 status跟着变了,
+             status一变再执行{@link #switchPositionIfNeeded(DraggableItemView)} 就会通过status来切换view的位置了
+             */
+//            Log.e("onViewPositionChanged:","changedView tag = "+1);
+            if (changedView == draggingView) {//这里始终是true
                 DraggableItemView changedItemView = (DraggableItemView) changedView;
-                Log.e("onViewPositionChanged:","changedView tag = "+changedItemView.getTag().toString());
+                Log.e("onViewPositionChanged:","changedView status = "+changedItemView.getStatus());
                 //其实拖动的时候被拖动的View的实例始终没变.只是其中的status的值设置了不同而已
                 switchPositionIfNeeded(changedItemView);
             }
@@ -236,7 +242,7 @@ public class DraggableSquareView extends ViewGroup {
                     //通过view最终停留的位置 设置status
                     draggingView.setStatus(fromChangeIndex);
                 }
-                return;
+                break;
             case DraggableItemView.STATUS_RIGHT_TOP:
                 if (centerX < everyWidth * 2) {
                     fromStatus = DraggableItemView.STATUS_LEFT_TOP;
@@ -435,6 +441,8 @@ public class DraggableSquareView extends ViewGroup {
 
         //设置点按下 item的左上角的位置
         itemView.saveAnchorInfo(downX, downY);
+        //此时做异步处理的好处能让绘制变得更流畅 可以去掉以下代码去对比效果
+        //作者在此方面肯定经验丰富
         moveAnchorThread = new Thread() {
             @Override
             public void run() {
@@ -484,7 +492,7 @@ public class DraggableSquareView extends ViewGroup {
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             // 手指按下的时候，需要把某些view bringToFront，否则的话，tryCapture将不按预期工作
-            getParent().requestDisallowInterceptTouchEvent(true);
+            getParent().requestDisallowInterceptTouchEvent(true);//阻止父层的View截获touch事件
             downX = (int) ev.getX();
             downY = (int) ev.getY();
             downTime = System.currentTimeMillis();

@@ -4,6 +4,7 @@ import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Point;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
@@ -153,7 +154,8 @@ public class DraggableItemView extends FrameLayout {
             maskView.setScaleY(scaleRate);
         }
 
-        setCurrentSpringPos(getLeft(), getTop());
+        //其实我始终没搞懂这个是用来干嘛的 去掉后的效果是一样的
+//        setCurrentSpringPos(getLeft(), getTop());
     }
 
     /**
@@ -192,7 +194,7 @@ public class DraggableItemView extends FrameLayout {
     }
 
     /**
-     * 设置缩放大小
+     * 设置缩放的大小 通过动画来渐变
      */
     public void scaleSize(int scaleLevel) {
         float rate = scaleRate;
@@ -237,10 +239,14 @@ public class DraggableItemView extends FrameLayout {
     }
 
     public void setScreenX(int screenX) {
+        //screenX 表示 0 - 目的点view的 x坐标,需要减去 当前正在移动view的left坐标 才是正在的offset位置
+        //拖动View的时候 getLeft 会一直变,所以这里的作用相当于纠正位置
+        Log.e("setScreenX", "offsetX = " + (screenX - getLeft()));
         this.offsetLeftAndRight(screenX - getLeft());
     }
 
     public void setScreenY(int screenY) {
+        Log.e("setScreenY", "offsetY = " + (screenY - getTop()));
         this.offsetTopAndBottom(screenY - getTop());
     }
 
@@ -264,6 +270,10 @@ public class DraggableItemView extends FrameLayout {
         this.parentView = parentView;
     }
 
+
+    /**
+     * 处理放开draggingView的时候需要落在的位置点
+     */
     public void onDragRelease() {
         if (status == DraggableItemView.STATUS_LEFT_TOP) {
             scaleSize(DraggableItemView.SCALE_LEVEL_1);
@@ -271,13 +281,13 @@ public class DraggableItemView extends FrameLayout {
             scaleSize(DraggableItemView.SCALE_LEVEL_2);
         }
 
-        springX.setOvershootClampingEnabled(false);
-        springY.setOvershootClampingEnabled(false);
+        springX.setOvershootClampingEnabled(true);
+        springY.setOvershootClampingEnabled(true);
         springX.setSpringConfig(springConfigCommon);
         springY.setSpringConfig(springConfigCommon);
 
         Point point = parentView.getOriginViewPos(status);
-        setCurrentSpringPos(getLeft(), getTop());
+//        setCurrentSpringPos(getLeft(), getTop());//其实这个根本不需要
         animTo(point.x, point.y);
     }
 
